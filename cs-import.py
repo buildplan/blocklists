@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-2026-02-16
+2026-02-19
 CrowdSec Blocklist Importer (Python Version)
 Auto-detect Native/Docker.
 """
@@ -217,6 +217,15 @@ def import_decisions(mode, new_nets):
         else: log.error(f"Import failed: {res.stderr}")
     except Exception as e: log.error(f"Error: {e}")
 
+def restart_bouncer():
+    """Forces the host-level firewall bouncer to reconnect and sync after a massive import."""
+    log.info("Restarting crowdsec-firewall-bouncer.service to force a clean sync...")
+    try:
+        subprocess.run(["systemctl", "restart", "crowdsec-firewall-bouncer.service"], check=True)
+        log.info("✓ Bouncer restarted successfully.")
+    except subprocess.CalledProcessError as e:
+        log.error(f"Failed to restart bouncer: {e}")
+
 # --- LOCKING ---
 def acquire_lock():
     lock_file = "/tmp/cs-import.lock"
@@ -251,6 +260,7 @@ def main():
 
         flush_old_decisions(mode)
         import_decisions(mode, clean)
+        restart_bouncer()
 
     finally:
         release_lock()
