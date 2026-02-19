@@ -19,23 +19,42 @@ jobs:
     - name: Ping all Blocklist URLs
       run: |
         python -c '
-        import re, urllib.request
-        # Read the script file to extract the URLs
-        with open("cs-import.py", "r") as f:
-            content = f.read()
-        # Find all URLs inside the BLOCKLISTS array
-        urls = re.findall(r"(https?://[^\"]+)", content)
-        failed = 0
-        for url in urls:
+        import re, urllib.request, time
+        
+        scripts = ["cs-import.py", "import-blocklists.py"]
+        all_urls = set() # Using a set to automatically prevent duplicate URLs
+        
+        for script in scripts:
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                urllib.request.urlopen(req, timeout=10)
-                print(f"✅ OK: {url}")
-            except Exception as e:
-                print(f"❌ FAILED: {url} - {e}")
+                with open(script, "r") as f:
+                    content = f.read()
+                    # Find URLs and add them to our set
+                    urls = re.findall(r"(https?://[^\"]+)", content)
+                    all_urls.update(urls)
+            except FileNotFoundError:
+                print(f"⚠️ WARNING: Could not find {script} to scan.")
+        failed = 0
+
+        for url in all_urls:
+            success = False
+            error_msg = ""
+            # Retry loop: try up to 3 times
+            for attempt in range(3):
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                    urllib.request.urlopen(req, timeout=15)
+                    print(f"✅ OK: {url}")
+                    success = True
+                    break # Success! Break out of the retry loop
+                except Exception as e:
+                    error_msg = str(e)
+                    time.sleep(2) # Wait 2 seconds before the next attempt
+                    
+            # If it failed all 3 attempts
+            if not success:
+                print(f"❌ FAILED (After 3 attempts): {url} - {error_msg}")
                 failed += 1
         if failed > 0:
             print(f"\n{failed} URLs are broken. Please update the scripts.")
             exit(1)
         '
-
