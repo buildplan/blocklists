@@ -245,6 +245,10 @@ def release_lock():
     if os.path.exists("/tmp/cs-import.lock"): os.remove("/tmp/cs-import.lock")
 
 def main():
+    log.info("-" * 60)
+    log.info("STARTING NEW BLOCKLIST IMPORT RUN")
+    log.info("-" * 60)
+
     acquire_lock()
     try:
         mode = detect_mode()
