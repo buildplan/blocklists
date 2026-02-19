@@ -1,0 +1,28 @@
+name: Script Security & Linting
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Install Linting & Security Tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 bandit
+    - name: Check for critical Python syntax errors
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    - name: Run Bandit Security Scanner
+      run: |
+        # Scans for dangerous imports or bad subprocess usage
+        bandit -r . -ll -ii -s B108,B310,B404,B603

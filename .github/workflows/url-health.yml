@@ -1,0 +1,41 @@
+name: Blocklist URL Health Monitor
+
+on:
+  schedule:
+    - cron: '0 12 * * 0' # Runs every Sunday at 12:00 UTC
+  workflow_dispatch:
+
+jobs:
+  verify-urls:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Ping all Blocklist URLs
+      run: |
+        python -c '
+        import re, urllib.request
+        # Read the script file to extract the URLs
+        with open("cs-import.py", "r") as f:
+            content = f.read()
+        # Find all URLs inside the BLOCKLISTS array
+        urls = re.findall(r"(https?://[^\"]+)", content)
+        failed = 0
+        for url in urls:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                urllib.request.urlopen(req, timeout=10)
+                print(f"✅ OK: {url}")
+            except Exception as e:
+                print(f"❌ FAILED: {url} - {e}")
+                failed += 1
+        if failed > 0:
+            print(f"\n{failed} URLs are broken. Please update the scripts.")
+            exit(1)
+        '
+
