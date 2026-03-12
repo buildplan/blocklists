@@ -202,9 +202,10 @@ def get_blocklists():
 def optimize_and_filter(networks, whitelist):
     v4_nets = [n for n in networks if n.version == 4]
     v6_nets = [n for n in networks if n.version == 6]
-    wl_v4 = [ipaddress.ip_network(w, strict=False) for w in whitelist if ipaddress.ip_network(w, strict=False).version == 4]
-    wl_v6 = [ipaddress.ip_network(w, strict=False) for w in whitelist if ipaddress.ip_network(w, strict=False).version == 6]
-
+    wl_parsed = [ipaddress.ip_network(w, strict=False) for w in whitelist]
+    wl_v4 = [n for n in wl_parsed if n.version == 4]
+    wl_v6 = [n for n in wl_parsed if n.version == 6]
+ 
     def process(nets, wl):
         if not nets: return []
         nets = list(ipaddress.collapse_addresses(nets))
