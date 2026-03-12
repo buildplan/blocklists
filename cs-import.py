@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-2026-02-19
-CrowdSec Blocklist Importer (Python Version)
+2026-03-12
+CrowdSec Blocklist Importer
 Auto-detect Native/Docker.
 """
 
+import json
 import os
 import sys
 import subprocess
@@ -20,6 +21,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 if os.geteuid() != 0:
     print("Error: This script must be run as root (use sudo).", file=sys.stderr)
     sys.exit(1)
+
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s",
+                    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)])
+log = logging.getLogger()
 
 # --- CONFIGURATION ---
 LOG_FILE = "/var/log/cs-import.log"
@@ -141,11 +147,6 @@ BLOCKLISTS = [
     ("Spamhaus DROPv6", "https://www.spamhaus.org/drop/dropv6.txt"),
     ("list.rtbh.com.tr", "https://list.rtbh.com.tr/output.txt"),
 ]
-
-# --- LOGGING ---
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s",
-                    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)])
-log = logging.getLogger()
 
 # --- HELPER FUNCTIONS ---
 def fetch_url(name, url):
