@@ -37,6 +37,76 @@ CUSTOM_WHITELIST = [
     "2001:4860:4860::8888", "2606:4700:4700::1111"
 ]
 
+# Cloudflare static ranges (from cloudflare.com/ips - fallback if API fails)
+CLOUDFLARE_STATIC = [
+    # IPv4
+    "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+    "104.16.0.0/13", "104.24.0.0/14", "108.162.192.0/18",
+    "131.0.72.0/22", "141.101.64.0/18", "162.158.0.0/15",
+    "172.64.0.0/13", "173.245.48.0/20", "188.114.96.0/20",
+    "190.93.240.0/20", "197.234.240.0/22", "198.41.128.0/17",
+    # IPv6
+    "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32",
+    "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29",
+    "2c0f:f248::/32",
+]
+
+# GitHub static ranges  last verified 2026-03-12 from api.github.com/meta (falback if API fails)
+GITHUB_STATIC = [
+    # IPv4
+    "140.82.112.0/20", "192.30.252.0/22", "185.199.108.0/22",
+    "143.55.64.0/20", "20.99.172.64/28", "135.234.59.224/28",
+    # IPv6
+    "2a0a:a440::/29", "2606:50c0::/32",
+]
+
+def fetch_dynamic_whitelist():
+    """Fetch live IP ranges from GitHub and Cloudflare APIs."""
+    ranges = []
+
+    # --- GitHub ---
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/meta",
+            headers={"User-Agent": "Blocklist-Updater/3.0", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+        seen = set()
+        for key in ("hooks", "web", "git", "api", "actions", "packages"):
+            for cidr in data.get(key, []):
+                if cidr not in seen:
+                    ranges.append(cidr)
+                    seen.add(cidr)
+        log.info(f"Dynamic whitelist: fetched {len(seen)} GitHub ranges from API")
+    except Exception as e:
+        log.warning(f"Dynamic whitelist: GitHub API failed ({e}), using static fallback")
+        ranges.extend(GITHUB_STATIC)
+
+    # --- Cloudflare ---
+    try:
+        req = urllib.request.Request(
+            "https://api.cloudflare.com/client/v4/ips",
+            headers={"User-Agent": "Blocklist-Updater/3.0", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+        cf_ranges = (
+            data.get("result", {}).get("ipv4_cidrs", []) +
+            data.get("result", {}).get("ipv6_cidrs", [])
+        )
+        if cf_ranges:
+            ranges.extend(cf_ranges)
+            log.info(f"Dynamic whitelist: fetched {len(cf_ranges)} Cloudflare ranges from API")
+        else:
+            raise ValueError("Empty result from Cloudflare API")
+    except Exception as e:
+        log.warning(f"Dynamic whitelist: Cloudflare API failed ({e}), using static fallback")
+        ranges.extend(CLOUDFLARE_STATIC)
+
+    return ranges
+
+
 # Blocklist Sources
 BLOCKLISTS = [
     ("AbuseIPDB", "https://raw.githubusercontent.com/borestad/blocklist-abuseipdb/main/abuseipdb-s100-30d.ipv4"),
@@ -254,12 +324,18 @@ def main():
         mode = detect_mode()
         check_lapi_health(mode)
 
+        # combined whitelist (static + dynamic)
+        dynamic_wl = fetch_dynamic_whitelist()
+        combined_whitelist = list(set(CUSTOM_WHITELIST + dynamic_wl))
+        log.info(f"Combined whitelist: {len(combined_whitelist)} entries "
+                 f"({len(CUSTOM_WHITELIST)} static + {len(dynamic_wl)} dynamic)")
+
         log.info("Starting blocklist download...")
         raw = get_blocklists()
         if not raw: sys.exit(1)
 
         log.info("Optimizing...")
-        clean = optimize_and_filter(raw, CUSTOM_WHITELIST)
+        clean = optimize_and_filter(raw, combined_whitelist)
         if len(clean) < MIN_IPS: log.error("Safety brake triggered (Too few IPs)."); sys.exit(1)
 
         flush_old_decisions(mode)
