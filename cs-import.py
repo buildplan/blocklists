@@ -57,7 +57,7 @@ CLOUDFLARE_STATIC = [
     "2c0f:f248::/32",
 ]
 
-# GitHub static ranges  last verified 2026-03-12 from api.github.com/meta (falback if API fails)
+# GitHub static ranges  last verified 2026-03-12 from api.github.com/meta (fallback if API fails)
 GITHUB_STATIC = [
     # IPv4
     "140.82.112.0/20", "192.30.252.0/22", "185.199.108.0/22",
@@ -205,7 +205,7 @@ def optimize_and_filter(networks, whitelist):
     wl_parsed = [ipaddress.ip_network(w, strict=False) for w in whitelist]
     wl_v4 = [n for n in wl_parsed if n.version == 4]
     wl_v6 = [n for n in wl_parsed if n.version == 6]
- 
+
     def process(nets, wl):
         if not nets: return []
         nets = list(ipaddress.collapse_addresses(nets))
@@ -262,11 +262,15 @@ def flush_old_decisions(mode):
     cmd = ["cscli", "decisions", "delete", "--origin", IMPORT_ORIGIN]
     if mode == "docker": cmd = ["docker", "exec", CROWDSEC_CONTAINER] + cmd
 
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0: log.info("✓ Flush successful.")
-        else: log.warning(f"Flush warning: {res.stderr.strip()}")
-    except Exception as e: log.error(f"Error flushing: {e}")
+    for attempt in range(3):
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if res.returncode == 0: log.info("✓ Flush successful."); return
+            elif "database is locked" in res.stderr:
+                log.warning(f"Flush attempt {attempt + 1}/3: DB locked, retrying in 10s..."); time.sleep(10)
+            else: log.warning(f"Flush warning: {res.stderr.strip()}"); return
+        except Exception as e: log.error(f"Error flushing: {e}"); return
+    log.warning("Flush failed after 3 attempts - old decisions will expire at defined time TIL - default 24h")
 
 def import_decisions(mode, new_nets):
     if not new_nets: return
