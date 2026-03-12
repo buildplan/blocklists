@@ -85,6 +85,7 @@ def fetch_dynamic_whitelist():
                     ranges.append(cidr)
                     seen.add(cidr)
         log.info(f"Dynamic whitelist: fetched {len(seen)} GitHub ranges from API")
+        if len(seen) > 200: log.warning(f"GitHub whitelist unusually large ({len(seen)} ranges)")
     except Exception as e:
         log.warning(f"Dynamic whitelist: GitHub API failed ({e}), using static fallback")
         ranges.extend(GITHUB_STATIC)
