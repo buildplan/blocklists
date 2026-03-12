@@ -143,7 +143,6 @@ BLOCKLISTS = [
     ("SOCKS Proxies", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/socks_proxy_7d.ipset"),
     ("Botvrij", "https://www.botvrij.eu/data/ioclist.ip-dst.raw"),
     ("StopForumSpam", "https://www.stopforumspam.com/downloads/toxic_ip_cidr.txt"),
-    ("Shodan Scanners", "https://gist.githubusercontent.com/jfqd/4ff7fa70950626a11832a4bc39451c1c/raw"),
     ("PHP Spammers", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/php_spammers_7d.ipset"),
     ("Spamhaus DROPv6", "https://www.spamhaus.org/drop/dropv6.txt"),
     ("list.rtbh.com.tr", "https://list.rtbh.com.tr/output.txt"),
