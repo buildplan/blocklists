@@ -22,11 +22,6 @@ if os.geteuid() != 0:
     print("Error: This script must be run as root (use sudo).", file=sys.stderr)
     sys.exit(1)
 
-# --- LOGGING ---
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s",
-                    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)])
-log = logging.getLogger()
-
 # --- CONFIGURATION ---
 LOG_FILE = "/var/log/cs-import.log"
 MIN_IPS = 200            # Safety brake
@@ -36,6 +31,11 @@ RETRIES = 3
 DECISION_DURATION = "24h"
 CROWDSEC_CONTAINER = "crowdsec" # Name of container if using Docker
 IMPORT_ORIGIN = "cscli-import"  # The origin assigned automatically by cscli import
+
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s",
+                    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)])
+log = logging.getLogger()
 
 # Custom Whitelist
 CUSTOM_WHITELIST = [
