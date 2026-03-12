@@ -79,7 +79,7 @@ def fetch_dynamic_whitelist():
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             data = json.loads(resp.read().decode())
         seen = set()
-        for key in ("hooks", "web", "git", "api", "actions", "packages"):
+        for key in ("hooks", "web", "git", "api"):
             for cidr in data.get(key, []):
                 if cidr not in seen:
                     ranges.append(cidr)
