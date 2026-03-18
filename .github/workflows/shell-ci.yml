@@ -1,0 +1,55 @@
+name: Shell Script CI/CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  TARGET_SCRIPTS: "cs-db-cleanup.sh crowdsec-db-cleanup.sh"
+
+jobs:
+  lint-and-compliance:
+    name: Lint & POSIX Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v6
+
+      - name: Install checkbashisms
+        run: sudo apt-get update && sudo apt-get install -y devscripts
+
+      - name: Validate Defined Scripts
+        run: |
+          for script in $TARGET_SCRIPTS; do
+            if [ ! -f "$script" ]; then
+              echo "Error: Defined file $script does not exist."
+              exit 1
+            fi
+
+            echo "-> Linting $script"
+            shellcheck "$script"
+            
+            echo "-> Checking POSIX compliance for $script"
+            # ShellCheck POSIX sh mode catches non-portable syntax
+            shellcheck --shell=sh "$script"
+            
+            # checkbashisms strictly checks for bash-specific syntax
+            checkbashisms -f "$script"
+          done
+
+  test:
+    name: Functional Testing
+    needs: lint-and-compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v6
+
+      - name: Setup BATS
+        uses: bats-core/bats-action@4.0.0
+
+      - name: Execute Tests
+        run: bats tests/
