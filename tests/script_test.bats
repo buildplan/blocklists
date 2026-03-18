@@ -1,6 +1,10 @@
 #!/usr/bin/env bats
 
 setup() {
+  # Load the official BATS assertion libraries provided by your GitHub Action
+  bats_load_library bats-support
+  bats_load_library bats-assert
+
   export MOCK_DIR="$BATS_TEST_DIRNAME/mocks"
   export FAKE_DB_DIR="$BATS_TEST_DIRNAME/fake_db"
   mkdir -p "$MOCK_DIR" "$FAKE_DB_DIR"
@@ -9,21 +13,20 @@ setup() {
   export DB_PATH="$FAKE_DB_DIR/crowdsec.db"
   export CONTAINER_NAME="crowdsec"
 
-  # Dynamically find the scripts regardless of where BATS is executed from
   if [ -f "$BATS_TEST_DIRNAME/../crowdsec-db-cleanup.sh" ]; then
      export SCRIPT1="$BATS_TEST_DIRNAME/../crowdsec-db-cleanup.sh"
      export SCRIPT2="$BATS_TEST_DIRNAME/../cs-db-cleanup.sh"
   else
-     echo "ERROR: Could not find scripts to test. Check your repository paths!" >&3
+     echo "ERROR: Could not find scripts to test. Check paths!" >&3
      exit 1
   fi
 
-  # Ensure scripts are executable
   chmod +x "$SCRIPT1" "$SCRIPT2"
 }
 
 teardown() {
-  rm -rf "$MOCK_DIR" "$FAKE_DB_DIR"
+  # Automatically clean up all artifacts after every test
+  rm -rf "$MOCK_DIR" "$FAKE_DB_DIR" "$BATS_TEST_DIRNAME/etc_crowdsec" "$BATS_TEST_DIRNAME/cs-test.sh" "$BATS_TEST_DIRNAME/calls.log"
 }
 
 create_mock() {
@@ -35,13 +38,11 @@ create_mock() {
 }
 
 @test "Exits gracefully when DB size is under threshold" {
-  # Create a 5MB fake file cleanly
   truncate -s 5M "$DB_PATH" 2>/dev/null || dd if=/dev/zero of="$DB_PATH" bs=1M count=5 2>/dev/null
 
   create_mock "docker" '
     if [ "$1" = "ps" ]; then exit 0; fi
     if [ "$1" = "exec" ] && echo "$*" | grep -q "wc -c"; then
-      # strip spaces just in case GNU wc formatting breaks math
       wc -c < "$DB_PATH" | tr -d " "
       exit 0
     fi
@@ -49,12 +50,9 @@ create_mock() {
 
   run "$SCRIPT1" 10 48h
 
-  # Print to logs if test fails (BATS swallows this if test passes)
-  echo "Status: $status"
-  echo "Output: $output"
-
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"is under the threshold"* ]]
+  # Official BATS assertions
+  assert_success
+  assert_output --partial "is under the threshold"
 }
 
 @test "Performs cleanup when DB size exceeds threshold" {
@@ -79,17 +77,12 @@ create_mock() {
 
   run "$SCRIPT1" 10 48h
 
-  echo "Status: $status"
-  echo "Output: $output"
-
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Threshold exceeded! Starting cleanup process..."* ]]
+  assert_success
+  assert_output --partial "Threshold exceeded! Starting cleanup process..."
 
   run cat "$CALL_LOG"
-  [[ "${lines[0]}" == *"exec crowdsec cscli alerts flush"* ]]
-  [[ "${lines[1]}" == *"stop crowdsec"* ]]
-
-  rm -f "$CALL_LOG"
+  assert_output --partial "exec crowdsec cscli alerts flush"
+  assert_output --partial "stop crowdsec"
 }
 
 @test "Fails if container is not running" {
@@ -99,11 +92,8 @@ create_mock() {
 
   run "$SCRIPT1" 10 48h
 
-  echo "Status: $status"
-  echo "Output: $output"
-
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"Error: Container 'crowdsec' is not running."* ]]
+  assert_failure
+  assert_output --partial "Error: Container 'crowdsec' is not running."
 }
 
 @test "cs-db-cleanup detects native mode correctly" {
@@ -122,15 +112,10 @@ create_mock() {
 
   run "$BATS_TEST_DIRNAME/cs-test.sh" 10 48h
 
-  [ "$status" -eq 0 ]
+  assert_success
+  assert_output --partial "Mode: Native (Host)"
 
-  printf "%s\n" "$output" > "$BATS_TEST_DIRNAME/run_output.log"
-
-  grep "Mode: Native (Host)" "$BATS_TEST_DIRNAME/run_output.log" >/dev/null
-
-  grep "systemctl stop crowdsec" "$BATS_TEST_DIRNAME/calls.log" >/dev/null
-  grep "sqlite3 $DB_PATH" "$BATS_TEST_DIRNAME/calls.log" >/dev/null
-
-  # Clean up
-  rm -rf "$CROWDSEC_ETC" "$BATS_TEST_DIRNAME/cs-test.sh" "$BATS_TEST_DIRNAME/calls.log" "$BATS_TEST_DIRNAME/run_output.log"
+  run cat "$BATS_TEST_DIRNAME/calls.log"
+  assert_output --partial "systemctl stop crowdsec"
+  assert_output --partial "sqlite3 $DB_PATH"
 }
