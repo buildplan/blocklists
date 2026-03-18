@@ -122,29 +122,34 @@ create_mock() {
 
   run "$BATS_TEST_DIRNAME/cs-test.sh" 10 48h
 
-  # Always print output so it appears in GitHub Actions logs if it fails
   echo "Status: $status"
   echo "Output: $output"
 
   [ "$status" -eq 0 ]
 
-  case "$output" in
-    *"Mode: Native (Host)"*) true ;;
-    *) echo "Failed: Native mode not detected!"; false ;;
-  esac
+  # 1. Safely check for native mode string line-by-line
+  native_found=0
+  for line in "${lines[@]}"; do
+    if [[ "$line" == *"Mode: Native (Host)"* ]]; then
+      native_found=1
+      break
+    fi
+  done
+  [ "$native_found" -eq 1 ]
 
+  # 2. Check the logs to verify it actually called native commands
   run cat "$BATS_TEST_DIRNAME/calls.log"
-  echo "Log Output: $output"
 
-  case "$output" in
-    *"systemctl stop crowdsec"*) true ;;
-    *) echo "Failed: systemctl stop not found in calls.log!"; false ;;
-  esac
+  stop_found=0
+  sqlite_found=0
 
-  case "$output" in
-    *"sqlite3 $DB_PATH"*) true ;;
-    *) echo "Failed: sqlite3 vacuum not found in calls.log!"; false ;;
-  esac
+  for line in "${lines[@]}"; do
+    if [[ "$line" == *"systemctl stop crowdsec"* ]]; then stop_found=1; fi
+    if [[ "$line" == *"sqlite3 $DB_PATH"* ]]; then sqlite_found=1; fi
+  done
+
+  [ "$stop_found" -eq 1 ]
+  [ "$sqlite_found" -eq 1 ]
 
   rm -rf "$CROWDSEC_ETC" "$BATS_TEST_DIRNAME/cs-test.sh" "$BATS_TEST_DIRNAME/calls.log"
 }
