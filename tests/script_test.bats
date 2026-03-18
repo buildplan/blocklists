@@ -43,7 +43,7 @@ create_mock() {
   '
 
   # Run script with 10MB threshold
-  run ./scripts/crowdsec-db-cleanup.sh 10 48h
+  run ./crowdsec-db-cleanup.sh 10 48h
 
   # Assertions
   [ "$status" -eq 0 ]
@@ -82,7 +82,7 @@ create_mock() {
   create_mock "sleep" 'exit 0'
 
   # Run script with 10MB threshold
-  run ./scripts/crowdsec-db-cleanup.sh 10 48h
+  run ./crowdsec-db-cleanup.sh 10 48h
 
   # Check script exit status
   [ "$status" -eq 0 ]
@@ -110,7 +110,7 @@ create_mock() {
     if [ "$1" = "ps" ]; then exit 1; fi
   '
 
-  run ./scripts/crowdsec-db-cleanup.sh 10 48h
+  run ./crowdsec-db-cleanup.sh 10 48h
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"Error: Container 'crowdsec' is not running."* ]]
@@ -129,7 +129,7 @@ create_mock() {
 
   # Inject the test directory into the script using sed for the test run only
   # (Since the script hardcodes /etc/crowdsec)
-  sed "s|/etc/crowdsec|$CROWDSEC_ETC|g" ./scripts/cs-db-cleanup.sh > "$BATS_TEST_DIRNAME/cs-test.sh"
+  sed "s|/etc/crowdsec|$CROWDSEC_ETC|g" ./cs-db-cleanup.sh > "$BATS_TEST_DIRNAME/cs-test.sh"
   chmod +x "$BATS_TEST_DIRNAME/cs-test.sh"
 
   dd if=/dev/zero of="$DB_PATH" bs=1M count=15 2>/dev/null
