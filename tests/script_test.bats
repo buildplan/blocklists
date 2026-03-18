@@ -122,34 +122,15 @@ create_mock() {
 
   run "$BATS_TEST_DIRNAME/cs-test.sh" 10 48h
 
-  echo "Status: $status"
-  echo "Output: $output"
-
   [ "$status" -eq 0 ]
 
-  # 1. Safely check for native mode string line-by-line
-  native_found=0
-  for line in "${lines[@]}"; do
-    if [[ "$line" == *"Mode: Native (Host)"* ]]; then
-      native_found=1
-      break
-    fi
-  done
-  [ "$native_found" -eq 1 ]
+  printf "%s\n" "$output" > "$BATS_TEST_DIRNAME/run_output.log"
 
-  # 2. Check the logs to verify it actually called native commands
-  run cat "$BATS_TEST_DIRNAME/calls.log"
+  grep "Mode: Native (Host)" "$BATS_TEST_DIRNAME/run_output.log" >/dev/null
 
-  stop_found=0
-  sqlite_found=0
+  grep "systemctl stop crowdsec" "$BATS_TEST_DIRNAME/calls.log" >/dev/null
+  grep "sqlite3 $DB_PATH" "$BATS_TEST_DIRNAME/calls.log" >/dev/null
 
-  for line in "${lines[@]}"; do
-    if [[ "$line" == *"systemctl stop crowdsec"* ]]; then stop_found=1; fi
-    if [[ "$line" == *"sqlite3 $DB_PATH"* ]]; then sqlite_found=1; fi
-  done
-
-  [ "$stop_found" -eq 1 ]
-  [ "$sqlite_found" -eq 1 ]
-
-  rm -rf "$CROWDSEC_ETC" "$BATS_TEST_DIRNAME/cs-test.sh" "$BATS_TEST_DIRNAME/calls.log"
+  # Clean up
+  rm -rf "$CROWDSEC_ETC" "$BATS_TEST_DIRNAME/cs-test.sh" "$BATS_TEST_DIRNAME/calls.log" "$BATS_TEST_DIRNAME/run_output.log"
 }
