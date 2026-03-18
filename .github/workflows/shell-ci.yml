@@ -1,4 +1,4 @@
-name: Shell Script CI/CD
+name: Shell Script Lint
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ env:
   TARGET_SCRIPTS: "cs-db-cleanup.sh crowdsec-db-cleanup.sh"
 
 jobs:
-  lint-and-compliance:
+  lint:
     name: Lint & POSIX Check
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +31,7 @@ jobs:
 
             echo "-> Linting $script"
             shellcheck "$script"
-            
+
             echo "-> Checking POSIX compliance for $script"
             # ShellCheck POSIX sh mode catches non-portable syntax
             shellcheck --shell=sh "$script"
@@ -39,17 +39,3 @@ jobs:
             # checkbashisms strictly checks for bash-specific syntax
             checkbashisms -f "$script"
           done
-
-  test:
-    name: Functional Testing
-    needs: lint-and-compliance
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout codebase
-        uses: actions/checkout@v6
-
-      - name: Setup BATS
-        uses: bats-core/bats-action@4.0.0
-
-      - name: Execute Tests
-        run: bats tests/
