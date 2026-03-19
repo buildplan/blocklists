@@ -3,9 +3,12 @@ name: Shell Script Lint
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+permissions:
+  contents: read
 
 env:
   TARGET_SCRIPTS: "cs-db-cleanup.sh crowdsec-db-cleanup.sh"
@@ -17,25 +20,16 @@ jobs:
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v6
-
       - name: Install checkbashisms
         run: sudo apt-get update && sudo apt-get install -y devscripts
-
-      - name: Validate Defined Scripts
+      - name: Validate defined scripts
+        shell: bash
         run: |
+          set -euo pipefail
           for script in $TARGET_SCRIPTS; do
-            if [ ! -f "$script" ]; then
-              echo "Error: Defined file $script does not exist."
-              exit 1
-            fi
-
-            echo "-> Linting $script"
-            shellcheck "$script"
-
-            echo "-> Checking POSIX compliance for $script"
-            # ShellCheck POSIX sh mode catches non-portable syntax
+            [ -f "$script" ] || { echo "Missing file: $script"; exit 1; }
+            echo "-> ShellCheck ($script)"
             shellcheck --shell=sh "$script"
-            
-            # checkbashisms strictly checks for bash-specific syntax
+            echo "-> checkbashisms ($script)"
             checkbashisms -f "$script"
           done
