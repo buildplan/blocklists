@@ -20,13 +20,12 @@ def require_root():
         log("Error: This script must be run as root (or with sudo).")
         sys.exit(1)
 
-def run_cmd(cmd: list, capture_output: bool = False, shell: bool = False) -> str | None:
+def run_cmd(cmd: list, capture_output: bool = False) -> str | None:
     """Helper to run a subprocess command safely."""
     try:
         result = subprocess.run(
             cmd,
             check=True,
-            shell=shell,
             text=True,
             stdout=subprocess.PIPE if capture_output else None,
             stderr=subprocess.PIPE if capture_output else None
