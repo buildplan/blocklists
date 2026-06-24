@@ -16,6 +16,10 @@ import urllib.error
 import time
 import re
 import tempfile
+import argparse
+import fcntl
+import shutil
+from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- ROOT CHECK ---
@@ -23,36 +27,40 @@ if os.geteuid() != 0:
     print("Error: This script must be run as root (use sudo).", file=sys.stderr)
     sys.exit(1)
 
-# --- CONFIGURATION ---
+if not shutil.which("nft"):
+    print("Error: 'nft' command not found. Please install nftables.", file=sys.stderr)
+    sys.exit(1)
+
+# --- CONFIGURATION DEFAULTS ---
 NFT_TABLE     = "import_blocklists"
 LOG_FILE      = "/var/log/import-blocklists.log"
-LOG_MAX_LINES = 2000
 MIN_IPS       = 200
 MAX_WORKERS   = 10
 TIMEOUT       = 15
 RETRIES       = 3
 
 # --- LOGGING ---
-def truncate_log_if_needed():
-    if not os.path.exists(LOG_FILE):
-        return
-    try:
-        with open(LOG_FILE, "r") as f:
-            lines = f.readlines()
-        if len(lines) > LOG_MAX_LINES:
-            with open(LOG_FILE, "w") as f:
-                f.write(f"[Log truncated - kept last {LOG_MAX_LINES} lines]\n")
-                f.writelines(lines[-LOG_MAX_LINES:])
-    except Exception as e:
-        print(f"Warning: Could not truncate log: {e}", file=sys.stderr)
-
-truncate_log_if_needed()
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)]
-)
 log = logging.getLogger()
+
+def setup_logging(log_file):
+    log.setLevel(logging.INFO)
+    formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
+    
+    # Stream Handler
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(formatter)
+    log.addHandler(sh)
+    
+    # File Handler
+    if log_file:
+        try:
+            # We don't fail hard here because running as root sometimes creates
+            # permission issues if the log dir doesn't exist, though it usually does
+            fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=2)
+            fh.setFormatter(formatter)
+            log.addHandler(fh)
+        except Exception as e:
+            print(f"Warning: Could not setup file logging to {log_file}: {e}", file=sys.stderr)
 
 # --- STATIC WHITELISTS ---
 CUSTOM_WHITELIST = [
@@ -264,6 +272,8 @@ def apply_nftables(v4_nets, v6_nets):
     v6_str = ", ".join(str(n) for n in v6_nets)
 
     config = f"""
+add table inet {NFT_TABLE}
+flush table inet {NFT_TABLE}
 table inet {NFT_TABLE} {{
     set v4_list {{
         type ipv4_addr
@@ -296,7 +306,6 @@ table inet {NFT_TABLE} {{
             log.error(f"NFTables syntax check failed: {chk.stderr.strip()}")
             return False
 
-        subprocess.run(["nft", "delete", "table", "inet", NFT_TABLE], stderr=subprocess.DEVNULL)
         apply = subprocess.run(["nft", "-f", nft_path], capture_output=True, text=True)
 
         if apply.returncode == 0:
@@ -310,27 +319,53 @@ table inet {NFT_TABLE} {{
             os.remove(nft_path)
 
 # --- LOCKING ---
+LOCK_FD = None
+LOCK_FILE = "/run/import-blocklists.lock"
+
 def acquire_lock():
-    lock_file = "/tmp/import-blocklists.lock"
-    if os.path.exists(lock_file):
-        try:
-            with open(lock_file, "r") as f:
-                pid = int(f.read().strip())
-            os.kill(pid, 0)
-            log.error(f"Script already running (PID {pid}). Exiting.")
-            sys.exit(1)
-        except (OSError, ValueError):
-            log.warning("Found stale lock file. Removing.")
-            os.remove(lock_file)
-    with open(lock_file, "w") as f:
-        f.write(str(os.getpid()))
+    global LOCK_FD
+    try:
+        LOCK_FD = open(LOCK_FILE, "w")
+        fcntl.flock(LOCK_FD, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        LOCK_FD.write(str(os.getpid()))
+        LOCK_FD.flush()
+    except (BlockingIOError, OSError):
+        log.error("Script is already running. Could not acquire lock. Exiting.")
+        sys.exit(1)
 
 def release_lock():
-    if os.path.exists("/tmp/import-blocklists.lock"):
-        os.remove("/tmp/import-blocklists.lock")
+    global LOCK_FD
+    if LOCK_FD:
+        try:
+            fcntl.flock(LOCK_FD, fcntl.LOCK_UN)
+            LOCK_FD.close()
+            if os.path.exists(LOCK_FILE):
+                os.remove(LOCK_FILE)
+        except Exception as e:
+            log.error(f"Error releasing lock: {e}")
 
 # --- MAIN ---
 def main():
+    global NFT_TABLE, LOG_FILE, MIN_IPS, MAX_WORKERS, TIMEOUT, RETRIES
+
+    parser = argparse.ArgumentParser(description="Fail2Ban/NFTables Blocklist Importer")
+    parser.add_argument("--nft-table", default=NFT_TABLE, help="NFTables table name")
+    parser.add_argument("--log-file", default=LOG_FILE, help="Log file path")
+    parser.add_argument("--min-ips", type=int, default=MIN_IPS, help="Minimum IPs safety threshold")
+    parser.add_argument("--workers", type=int, default=MAX_WORKERS, help="Number of download threads")
+    parser.add_argument("--timeout", type=int, default=TIMEOUT, help="Download timeout in seconds")
+    parser.add_argument("--retries", type=int, default=RETRIES, help="Download retries")
+    args = parser.parse_args()
+
+    NFT_TABLE = args.nft_table
+    LOG_FILE = args.log_file
+    MIN_IPS = args.min_ips
+    MAX_WORKERS = args.workers
+    TIMEOUT = args.timeout
+    RETRIES = args.retries
+
+    setup_logging(LOG_FILE)
+
     log.info("-" * 60)
     log.info("STARTING NEW BLOCKLIST IMPORT RUN")
     log.info("-" * 60)
