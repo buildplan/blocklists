@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-2026-03-12
+2026-06-24
 Fail2Ban/NFTables Blocklist Importer
 Auto-detect NFTables. GitHub + Cloudflare whitelisted.
 """
