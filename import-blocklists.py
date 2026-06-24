@@ -279,8 +279,8 @@ table inet {NFT_TABLE} {{
         elements = {{ {v6_str} }}
     }}
 
-    chain inbound {{
-        type filter hook input priority -100; policy accept;
+    chain prerouting_drop {{
+        type filter hook prerouting priority -300; policy accept;
         ip saddr @v4_list counter drop
         ip6 saddr @v6_list counter drop
     }}
