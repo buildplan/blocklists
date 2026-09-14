@@ -23,7 +23,7 @@ A Python script that aggregates multiple IP blocklists, filters out whitelisted 
 Clone the repository and run the installer:
 
 ```bash
-git clone https://gitlab.com/buildplan/blocklists.git
+git clone https://github.com/buildplan/blocklists.git
 cd blocklists
 sudo ./install.sh
 ```
